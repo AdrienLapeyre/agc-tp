@@ -74,7 +74,7 @@ def read_fasta(amplicon_file, minseqlen):
     """Returns a generator of sequences
       :Parameters:
           amplicon_file: Path to the amplicon_file
-          minseqlen: Minimal length of sequences
+          minseqlen: Minimal length of sequences (int)
       Returns: generator of sequences
     """
     # Open the file in read mode
@@ -102,8 +102,8 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
     """Returns a generator of unique sequences
       :Parameters:
           amplicon_file: Path to the amplicon_file
-          minseqlen: Minimal length of sequences
-          mincount: Minimum counting
+          minseqlen: Minimal length of sequences (int)
+          mincount: Minimum counting (int)
       Returns: generator of unique sequences
     """
     dic = {}
@@ -115,7 +115,7 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
             dic[seq] = 1
         else:
             dic[seq] += 1
-    # Runs the dict in descending order
+    # Run the dict in descending order
     for key, value in sorted(dic.items(), key=lambda x: x[1], reverse=True):
         # Yield the sequence if her counting is enough
         if value >= mincount:
@@ -123,27 +123,184 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
 
 
 def get_chunks(sequence, chunk_size):
-    pass
+    """Returns a list of non overlapping sub sequences of length chunk_size
+      :Parameters:
+          sequence: Sequence (string)
+          chunk_size: Sub sequences length (int)
+      Returns: list of sub sequences (list)
+    """
+    sub_seqs = []
+    # Build 4 sub sequences
+    for i in range(4):
+        sub_seqs.append(sequence[i*chunk_size:(i+1)*chunk_size])
+    return sub_seqs
 
 
 def get_unique(ids):
+    """Returns a dict_keys object (with unique elements)"""
     return {}.fromkeys(ids).keys()
 
 
 def common(lst1, lst2):
+    """Returns a list with elements which are in both two lists"""
     return list(set(lst1) & set(lst2))
 
 
 def cut_kmer(sequence, kmer_size):
-    pass
+    """Returns a generator of kmers
+      :Parameters:
+          sequence: Sequence (string)
+          kmer_size: Size of kmers (int)
+      Returns: generator of kmers
+    """
+    # Yield each kmer of a sequence
+    for i in range(len(sequence)-kmer_size+1):
+        yield sequence[i:i+kmer_size]
+
+
+def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
+    """Returns a dictionnary of kmers with the list of sequence ids of the sequences where they are
+      :Parameters:
+          kmer_dict: Dictionnary of kmers (dict)
+          sequence: Sequence (string)
+          id_seq: Id of the sequence (int)
+          kmer_size: Size of kmers (int)
+      Returns: dictionnary of kmers (dict)
+    """
+    # Kmer generator
+    read = cut_kmer(sequence, kmer_size)
+    for kmer in read:
+        # Add each kmer in the dictionnary if it doesn't exist or his id_seq to the list
+        if kmer not in kmer_dict:
+            kmer_dict[kmer] = [id_seq]
+        else:
+            kmer_dict[kmer].append(id_seq)
+    return kmer_dict
+
+
+def search_mates(kmer_dict, sequence, kmer_size):
+    """Returns a list with the sequence ids of the 8 most similar sequences with the candidate one
+      :Parameters:
+          kmer_dict: Dictionnary of kmers (dict)
+          sequence: Sequence (string)
+          kmer_size: Size of kmers (int)
+      Returns: list of ids (list)
+    """
+    result = []
+    id_seq_string = ""
+    # Kmer generator
+    read = cut_kmer(sequence, kmer_size)
+    for kmer in read:
+        for key, value in kmer_dict.items():
+            # Find equal kmer to the one used
+            if kmer == key:
+                # Add all the sequence ids of this kmer to the big string of ids
+                for id_seq in value:
+                    id_seq_string += str(id_seq)
+    # Count the 8 most similar sequences
+    counter = Counter(id_seq_string).most_common(8)
+    # Add the id of those sequences to the result
+    for elem in counter:
+        result.append(int(elem[0]))
+    return result
 
 
 def get_identity(alignment_list):
-    pass
+    """Returns the percentage of identity of two sequences
+      :Parameters:
+          alignment_list: List with the two sequences to compare (list)
+      Returns: percentage of identity of two sequences (float)
+    """
+    length = len(alignment_list[0])
+    nb_equal = 0
+    for i in range(length):
+        if alignment_list[0][i] == alignment_list[1][i]:
+            nb_equal += 1
+    return round((nb_equal/length)*100, 2)
+
+
+def detect_chimera(perc_identity_matrix):
+    """Returns True if the candidate sequence is a chimera (False if not)
+      :Parameters:
+          perc_identity_matrix: Matrix giving for each segment the percentage of identity betweeen
+                                a candidate sequence and mate sequences (list)
+      Returns: (bool)
+    """
+    result = False
+    test = True
+    percentages = []
+    # Run the matrix and create a list with all percentages
+    for lign in perc_identity_matrix:
+        for elem in lign:
+            percentages.append(elem)
+    # Compute the standard deviation
+    std = statistics.stdev(percentages)
+    # Check if percentages of identity are not equal for each segment and each parent
+    if (perc_identity_matrix[0][0] == perc_identity_matrix[1][0] == perc_identity_matrix[2][0] ==
+            perc_identity_matrix[3][0] and perc_identity_matrix[0][1] == perc_identity_matrix[1][1]
+            == perc_identity_matrix[2][1] == perc_identity_matrix[3][1]):
+        test = False
+    # If the check is ok and the std > 5 then it is a chimera
+    if std > 5 and test:
+        result = True
+    return result
 
 
 def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+    """Returns a generator of non chimera sequences
+      :Parameters:
+          amplicon_file: Path to the amplicon_file
+          minseqlen: Minimal length of sequences (int)
+          mincount: Minimum counting (int)
+          chunk_size: Sub sequences length (int)
+          kmer_size: Size of kmers (int)
+      Returns: generator of non chimera sequences
+    """
+    non_chimera_seq_list = []
+    # Sequence generator
+    read = dereplication_fulllength(amplicon_file, minseqlen, mincount)
+    cpt = 0
+    for seq, value in read:
+        # The two first sequences are considered as non chimera
+        if cpt == 0 or cpt == 1:
+            non_chimera_seq_list.append([seq, value])
+        # Then we evaluate other ones
+        else:
+            id_seq = 0
+            kmer_dict = {}
+            # First we build the kmer_dict with all non chimera sequences
+            for target_seq in non_chimera_seq_list:
+                # Segments generator
+                chunk_list = get_chunks(target_seq[0], chunk_size)
+                for chunk in chunk_list:
+                    kmer_dict = get_unique_kmer(kmer_dict, chunk, id_seq, kmer_size)
+                id_seq += 1
+            # Then we build a list of ids of mate non chimera sequences
+            mate_seq_list_id = search_mates(kmer_dict, seq, kmer_size)
+            perc_identity_matrix = 4*[[]]
+            # Then we compute the matrix with the percentages of identity
+            for mate in mate_seq_list_id:
+                # Segments generators
+                chunk_list1 = get_chunks(seq, chunk_size)
+                chunk_list2 = get_chunks(non_chimera_seq_list[mate][0], chunk_size)
+                for i in range(len(chunk_list1)):
+                    # Make alignment between two segments
+                    alignment_list = nw.global_align(chunk_list1[i], chunk_list2[i], gap_open=-1,
+                                                     gap_extend=-1, matrix=os.path.abspath(
+                                                         os.path.join(os.path.dirname(__file__),
+                                                                      "MATCH")))
+                    # Compute their identity
+                    identity = get_identity(alignment_list)
+                    perc_identity_matrix[i].append(identity)
+            # Finally we decide if the candidate sequence is a chimera or not
+            chimera = detect_chimera(perc_identity_matrix)
+            # If it is not, we add it to the non chimera sequences list
+            if not chimera:
+                non_chimera_seq_list.append([seq, value])
+        cpt += 1
+    # Yield each non chimera sequence with her counting
+    for elem in non_chimera_seq_list:
+        yield elem
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):

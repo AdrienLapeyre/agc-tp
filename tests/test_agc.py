@@ -76,29 +76,29 @@ def test_cut_kmer():
         assert(True)
 
 
-# def test_get_unique_kmer():
-#     """
-#     """
-#     kmer_dict = get_unique_kmer({}, "TGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAG", 0, 8)
-#     kmer_dict = get_unique_kmer(kmer_dict, "GGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGC", 1, 8)
-#     assert(len(kmer_dict) == 31)
-#     assert(len(kmer_dict["TGGGGAAT"]) == 1)
-#     assert(len(kmer_dict["GGGGAATA"]) == 2)
-#     assert(len(kmer_dict["GATGCAGC"]) == 1)
+def test_get_unique_kmer():
+    """
+    """
+    kmer_dict = get_unique_kmer({}, "TGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAG", 0, 8)
+    kmer_dict = get_unique_kmer(kmer_dict, "GGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGC", 1, 8)
+    assert(len(kmer_dict) == 31)
+    assert(len(kmer_dict["TGGGGAAT"]) == 1)
+    assert(len(kmer_dict["GGGGAATA"]) == 2)
+    assert(len(kmer_dict["GATGCAGC"]) == 1)
 
 
-# def test_search_mates():
-#     """
-#     """
-#     kmer_dict = get_unique_kmer({}, "TGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAG", 0, 8)
-#     kmer_dict = get_unique_kmer(kmer_dict, "GGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGC", 1, 8)
-#     kmer_dict = get_unique_kmer(kmer_dict, "GGGAATATTGCACAATGGGCGCAAGCCTGATGCAGCC", 2, 8)
-#     best_mates = search_mates(kmer_dict, "GGAATATTGCACAATGGGCGCAAGCCTGATGCAGCCA", 8)
-#     print(best_mates)
-#     assert(len(best_mates) == 3)
-#     assert(best_mates[0] == 2)
-#     assert(best_mates[1] == 1)
-#     assert(best_mates[2] == 0)
+def test_search_mates():
+    """
+    """
+    kmer_dict = get_unique_kmer({}, "TGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAG", 0, 8)
+    kmer_dict = get_unique_kmer(kmer_dict, "GGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGC", 1, 8)
+    kmer_dict = get_unique_kmer(kmer_dict, "GGGAATATTGCACAATGGGCGCAAGCCTGATGCAGCC", 2, 8)
+    best_mates = search_mates(kmer_dict, "GGAATATTGCACAATGGGCGCAAGCCTGATGCAGCCA", 8)
+    print(best_mates)
+    assert(len(best_mates) == 3)
+    assert(best_mates[0] == 2)
+    assert(best_mates[1] == 1)
+    assert(best_mates[2] == 0)
 
 def test_get_identity():
     """
@@ -106,27 +106,27 @@ def test_get_identity():
     idres = get_identity(("TGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAG", "TGGGGAATA--GCACAATGGGCGCAAGCCTCTAGCAG"))
     assert(round(idres,1) == 86.5)
 
-# def test_detect_chimera():
-#     # best:
-#     # 1 , 1, 1, 0
-#     assert(not detect_chimera([[73.58, 73.79], [72.97, 77.06], [77.36, 80.58], [78.43, 78.43]]))
-#     assert(not detect_chimera([[62.6, 94.17], [62.6, 94.17], [62.6, 94.17], [62.6, 94.17]]))
-#     assert(detect_chimera([[98.0, 60.0], [100.0, 65.0], [100.0, 63.0], [64.0, 100.0]]))
-#     S000387216 = "GGAGGCTCGTACCGCTGTCTTGTTAAGGACTGGTTTTTTACTGTCTATACAGACTCTTCATACTACTGGATATCCTGATATGCGTTCGGATCGATTGTTGCCGTACGCTGTGTCGATTAAAGGTAATCATAAGGGCTTTCGACTTACGACTC"
-#     chimera_AJ007403 = "AAGACGCTTGGGTTTCACTCCTGCGCTTCGGCCGGGCCCGGCACTCGCCACAGTCTCGAGCGTCGTCTTGATGTTCACATTGCGTTCGGATCGATTGTTGCCGTACGCCTGTGTCATTAAAGGTAATCATAAGGGCTTTCGACTTACGACTC"
-#     S000001688 = "AAGACGCTTGGGTTTCACTCCTGCGCTTCGGCCGGGCCCGGCACTCGCCACAGTCTCGAGCGTCGTCTTGATGTTCACATGTAACGATCGCTTCCAACCCATCCGGTGCTGTGTCGCCGGGCACGGCTTGGGAATTAACTATTCCCAAGTCT"
-#     chunk_chim = get_chunks(chimera_AJ007403, 37)
-#     chunk_seq_list = [get_chunks(S000387216, 37)]
-#     chunk_seq_list += [get_chunks(S000001688, 37)]
-#     perc_identity_matrix = [[] for c in range(len(chunk_chim))]
-#     for i in range(len(chunk_seq_list)):
-#         for l,chunk in enumerate(chunk_chim):
-#             perc_identity_matrix[l].append(get_identity(
-#                         nw.global_align(chunk, chunk_seq_list[i][l], 
-#                             gap_open=-1, gap_extend=-1, matrix=os.path.abspath(os.path.join(os.path.dirname(__file__),
-#                                                 '../agc')) + "/MATCH")))
-#     # [[48.89, 100.0], [51.16, 100.0], [84.62, 58.54], [94.74, 45.65]]
-#     assert(detect_chimera(perc_identity_matrix))
+def test_detect_chimera():
+    # best:
+    # 1 , 1, 1, 0
+    assert(not detect_chimera([[73.58, 73.79], [72.97, 77.06], [77.36, 80.58], [78.43, 78.43]]))
+    assert(not detect_chimera([[62.6, 94.17], [62.6, 94.17], [62.6, 94.17], [62.6, 94.17]]))
+    assert(detect_chimera([[98.0, 60.0], [100.0, 65.0], [100.0, 63.0], [64.0, 100.0]]))
+    S000387216 = "GGAGGCTCGTACCGCTGTCTTGTTAAGGACTGGTTTTTTACTGTCTATACAGACTCTTCATACTACTGGATATCCTGATATGCGTTCGGATCGATTGTTGCCGTACGCTGTGTCGATTAAAGGTAATCATAAGGGCTTTCGACTTACGACTC"
+    chimera_AJ007403 = "AAGACGCTTGGGTTTCACTCCTGCGCTTCGGCCGGGCCCGGCACTCGCCACAGTCTCGAGCGTCGTCTTGATGTTCACATTGCGTTCGGATCGATTGTTGCCGTACGCCTGTGTCATTAAAGGTAATCATAAGGGCTTTCGACTTACGACTC"
+    S000001688 = "AAGACGCTTGGGTTTCACTCCTGCGCTTCGGCCGGGCCCGGCACTCGCCACAGTCTCGAGCGTCGTCTTGATGTTCACATGTAACGATCGCTTCCAACCCATCCGGTGCTGTGTCGCCGGGCACGGCTTGGGAATTAACTATTCCCAAGTCT"
+    chunk_chim = get_chunks(chimera_AJ007403, 37)
+    chunk_seq_list = [get_chunks(S000387216, 37)]
+    chunk_seq_list += [get_chunks(S000001688, 37)]
+    perc_identity_matrix = [[] for c in range(len(chunk_chim))]
+    for i in range(len(chunk_seq_list)):
+        for l,chunk in enumerate(chunk_chim):
+            perc_identity_matrix[l].append(get_identity(
+                        nw.global_align(chunk, chunk_seq_list[i][l], 
+                            gap_open=-1, gap_extend=-1, matrix=os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                '../agc')) + "/MATCH")))
+    # [[48.89, 100.0], [51.16, 100.0], [84.62, 58.54], [94.74, 45.65]]
+    assert(detect_chimera(perc_identity_matrix))
 
 
 def test_chimera_removal():
