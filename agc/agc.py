@@ -186,23 +186,19 @@ def search_mates(kmer_dict, sequence, kmer_size):
           kmer_size: Size of kmers (int)
       Returns: list of ids (list)
     """
-    result = []
     id_seq_string = ""
     # Kmer generator
     read = cut_kmer(sequence, kmer_size)
     for kmer in read:
-        for key, value in kmer_dict.items():
-            # Find equal kmer to the one used
-            if kmer == key:
-                # Add all the sequence ids of this kmer to the big string of ids
-                for id_seq in value:
-                    id_seq_string += str(id_seq)
+        # Find equal kmer to the one used
+        if kmer in kmer_dict:
+            # Add all the sequence ids of this kmer to the big string of ids
+            for id_seq in kmer_dict[kmer]:
+                id_seq_string += str(id_seq)
     # Count the 8 most similar sequences
     counter = Counter(id_seq_string).most_common(8)
-    # Add the id of those sequences to the result
-    for elem in counter:
-        result.append(int(elem[0]))
-    return result
+    # Return a list with their id
+    return [int(elem[0]) for elem in counter]
 
 
 def get_identity(alignment_list):
@@ -227,22 +223,18 @@ def detect_chimera(perc_identity_matrix):
       Returns: (bool)
     """
     result = False
-    test = True
-    percentages = []
-    # Run the matrix and create a list with all percentages
+    std = 0
+    # Run the matrix and compute the mean standard deviation
     for lign in perc_identity_matrix:
-        for elem in lign:
-            percentages.append(elem)
-    # Compute the standard deviation
-    std = statistics.stdev(percentages)
+        std += statistics.stdev(lign)
+    std /= len(perc_identity_matrix)
     # Check if percentages of identity are not equal for each segment and each parent
-    if (perc_identity_matrix[0][0] == perc_identity_matrix[1][0] == perc_identity_matrix[2][0] ==
-            perc_identity_matrix[3][0] and perc_identity_matrix[0][1] == perc_identity_matrix[1][1]
-            == perc_identity_matrix[2][1] == perc_identity_matrix[3][1]):
-        test = False
-    # If the check is ok and the std > 5 then it is a chimera
-    if std > 5 and test:
-        result = True
+    if not(perc_identity_matrix[0][0] == perc_identity_matrix[1][0] == perc_identity_matrix[2][0] ==
+           perc_identity_matrix[3][0] and perc_identity_matrix[0][1] == perc_identity_matrix[1][1]
+           == perc_identity_matrix[2][1] == perc_identity_matrix[3][1]):
+        # If the std > 5 then it is a chimera
+        if std > 5:
+            result = True
     return result
 
 
@@ -257,54 +249,89 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
       Returns: generator of non chimera sequences
     """
     non_chimera_seq_list = []
+    id_seq = 0
+    kmer_dict = {}
     # Sequence generator
     read = dereplication_fulllength(amplicon_file, minseqlen, mincount)
-    cpt = 0
+    # Evaluate each sequence
     for seq, value in read:
-        # The two first sequences are considered as non chimera
-        if cpt == 0 or cpt == 1:
-            non_chimera_seq_list.append([seq, value])
-        # Then we evaluate other ones
-        else:
-            id_seq = 0
-            kmer_dict = {}
-            # First we build the kmer_dict with all non chimera sequences
-            for target_seq in non_chimera_seq_list:
-                # Segments generator
-                chunk_list = get_chunks(target_seq[0], chunk_size)
-                for chunk in chunk_list:
-                    kmer_dict = get_unique_kmer(kmer_dict, chunk, id_seq, kmer_size)
-                id_seq += 1
-            # Then we build a list of ids of mate non chimera sequences
-            mate_seq_list_id = search_mates(kmer_dict, seq, kmer_size)
-            perc_identity_matrix = 4*[[]]
+        mate_seq_list_id = []
+        # List of segments
+        chunk_list = list(get_chunks(seq, chunk_size))
+        # Build a list of ids of mate non chimera sequences for each segment
+        for chunk in chunk_list:
+            mate_seq_list_id.append(search_mates(kmer_dict, chunk, kmer_size))
+        # Find parent sequences if there are
+        parent_seq_list_id = common(common(mate_seq_list_id[0], mate_seq_list_id[1]),
+                                    common(mate_seq_list_id[2], mate_seq_list_id[3]))
+        perc_identity_matrix = [[], [], [], []]
+        chimera = False
+        # If there are at least 2 parents
+        if len(parent_seq_list_id) >= 2:
             # Then we compute the matrix with the percentages of identity
-            for mate in mate_seq_list_id:
-                # Segments generators
-                chunk_list1 = get_chunks(seq, chunk_size)
-                chunk_list2 = get_chunks(non_chimera_seq_list[mate][0], chunk_size)
-                for i in range(len(chunk_list1)):
+            for parent in parent_seq_list_id[:2]:
+                # List of segments of the parent
+                chunk_list_p = list(get_chunks(non_chimera_seq_list[parent][0], chunk_size))
+                for i in range(len(chunk_list)):
                     # Make alignment between two segments
-                    alignment_list = nw.global_align(chunk_list1[i], chunk_list2[i], gap_open=-1,
+                    alignment_list = nw.global_align(chunk_list[i], chunk_list_p[i], gap_open=-1,
                                                      gap_extend=-1, matrix=os.path.abspath(
                                                          os.path.join(os.path.dirname(__file__),
                                                                       "MATCH")))
                     # Compute their identity
                     identity = get_identity(alignment_list)
                     perc_identity_matrix[i].append(identity)
-            # Finally we decide if the candidate sequence is a chimera or not
+            # Finally we check if the candidate sequence is a chimera or not
             chimera = detect_chimera(perc_identity_matrix)
-            # If it is not, we add it to the non chimera sequences list
-            if not chimera:
-                non_chimera_seq_list.append([seq, value])
-        cpt += 1
-    # Yield each non chimera sequence with her counting
-    for elem in non_chimera_seq_list:
-        yield elem
+        # If it is not
+        if not chimera:
+            # We add it to the non chimera sequences list
+            non_chimera_seq_list.append([seq, value])
+            # We also add it to kmer_dict
+            for chunk in chunk_list:
+                kmer_dict = get_unique_kmer(kmer_dict, chunk, id_seq, kmer_size)
+            id_seq += 1
+            # And we yield it with her counting
+            yield [seq, value]
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+    """Returns a list of OTU
+      :Parameters:
+          amplicon_file: Path to the amplicon_file
+          minseqlen: Minimal length of sequences (int)
+          mincount: Minimum counting (int)
+          chunk_size: Sub sequences length (int)
+          kmer_size: Size of kmers (int)
+      Returns: list of OTU (list)
+    """
+    result = []
+    # Non chimera sequences list (in ascending order)
+    read = sorted(list(chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size)),
+                  key=lambda x: x[1])
+    # Run the list (not the last sequence which is necessarily an OTU)
+    cpt = 1
+    for seq1, value1 in read[:-1]:
+        otu = True
+        # Run a second time to compare the sequence with all other (which have a bigger counting)
+        for seq2, value2 in read[cpt:]:
+            # Make alignment between two sequences
+            alignment_list = nw.global_align(seq1, seq2, gap_open=-1, gap_extend=-1,
+                                             matrix=os.path.abspath(os.path.join(
+                                                 os.path.dirname(__file__), "MATCH")))
+            # Check if the sequence is an OTU
+            if seq1 != seq2 and get_identity(alignment_list) > 97 and value2 > value1:
+                otu = False
+                break
+        # Add the sequence and her counting to the result if it is and OTU
+        if otu:
+            result.append([seq1, value1])
+        cpt += 1
+    # Add the last sequence to the list of OTU
+    result.append([read[-1][0], read[-1][1]])
+    # Sort the result in descending order
+    result = sorted(result, key=lambda x: x[1], reverse=True)
+    return result
 
 
 def fill(text, width=80):
@@ -312,8 +339,22 @@ def fill(text, width=80):
     return os.linesep.join(text[i:i+width] for i in range(0, len(text), width))
 
 
-def write_OTU(OTU_list, output_file):
-    pass
+def write_OTU(otu_list, output_file):
+    """Creates the OTU.fasta file
+      :Parameters:
+          otu_list: list of all OTU and their couting
+          output_file: path of the OTU.fasta file
+    """
+    text = ''
+    cpt = 1
+    # Prepare the text to fasta format
+    for elem in otu_list:
+        text += ('>OTU_' + str(cpt) + ' occurrence:' + str(elem[1]) + '\n'
+                 + fill(elem[0]) + '\n')
+        cpt += 1
+    # Write it in the output_file
+    with open(output_file, 'w') as my_file:
+        my_file.write(text)
 
 
 #==============================================================
@@ -325,6 +366,11 @@ def main():
     """
     # Get arguments
     args = get_arguments()
+
+    # OTU search and creation of the OTU.fasta file
+    otu_list = abundance_greedy_clustering(args.amplicon_file, args.minseqlen, args.mincount,
+                                           args.chunk_size, args.kmer_size)
+    write_OTU(otu_list, args.output_file)
 
 
 if __name__ == '__main__':
